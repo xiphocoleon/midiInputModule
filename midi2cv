@@ -63,6 +63,9 @@ if ( MIDI.read() != 0 )
   pitch = MIDI.getData1();
   velocity = MIDI.getData2();   
   blinkLED();
+
+  handleNoteOn (channel, pitch, velocity);
+  
 }
 
 delay(100);
@@ -76,6 +79,9 @@ void handleNoteOn(byte channel, byte pitch, byte velocity)
  * 1. Write Octal latches to values of pitch
  * 
  */
+
+DAC_write( pitch );
+latch_DAC();
 
   
 }
