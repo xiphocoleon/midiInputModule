@@ -1,0 +1,128 @@
+#include <MIDI.h>
+
+MIDI_CREATE_DEFAULT_INSTANCE();
+
+int i,j;
+int binaryOuts[] = {39, 41, 43, 45, 47, 49, 51, 53}; //Latch 0 - 7 IN pins to Mega OUT pins
+int writeLatch = 35; //When this is HIGH, latch can make changes; when LOW, latch will not change
+int LED = 13;
+
+byte channel;
+byte pitch;
+byte velocity;
+
+void setup() 
+{
+    // Connect the handleNoteOn function to the library,
+    // so it is called upon reception of a NoteOn.
+    MIDI.setHandleNoteOn(handleNoteOn);  // Put only the name of the function
+
+    // Do the same for NoteOffs
+    MIDI.setHandleNoteOff(handleNoteOff);
+
+    // Initiate MIDI communications, listen to all channels
+    MIDI.begin(MIDI_CHANNEL_OMNI);
+
+  //Set Octal Latch connections as OUTPUTS 
+  for ( i = 0 ; i < 8 ; i ++ )
+  {
+    pinMode(binaryOuts[i], OUTPUT);
+  }
+  pinMode(writeLatch, OUTPUT);
+
+  //Writes all Latch INs and Latch Write Enable LOW
+  zero(); 
+
+
+  
+  //LED for monitoring things and introductory blink series
+  pinMode(LED, OUTPUT);
+  
+  for ( j = 0 ; j < 11 ; j++ )
+  {
+    digitalWrite( LED, HIGH);
+    delay(100);
+    digitalWrite( LED, LOW );
+    delay(100);
+  }
+  digitalWrite( LED, LOW);  
+}
+
+void loop() 
+{
+// 1. Confirmed MIDI is coming from Ableton
+// 2. Confirmed Optocoupler is sending PWM signal
+// 3. Confirm MIDI is read at Serial Port from Optocoupler:
+// 4. Confirm Arduin is reading the correct MIDI note from Ableton
+// 5. Write MIDI Note On code so that the Arduino does the correct things when note pressed
+
+
+if ( MIDI.read() != 0 )
+{
+  channel = MIDI.getChannel();
+  pitch = MIDI.getData1();
+  velocity = MIDI.getData2();   
+  blinkLED();
+}
+
+delay(100);
+
+}//CLOSE LOOP
+
+void handleNoteOn(byte channel, byte pitch, byte velocity)
+{
+/*Pseudocode
+ * 0. Blink LED to confirm that this method reads a NoteOn Message
+ * 1. Write Octal latches to values of pitch
+ * 
+ */
+
+  
+}
+void handleNoteOff(byte channel, byte pitch, byte velocity)
+{
+    // Do something when the note is released.
+    // Note that NoteOn messages with 0 velocity are interpreted as NoteOffs.
+}
+
+// Operations related to reading/writing MIDI
+
+//DAC Write can write pitches or velocities
+void DAC_write ( char command_byte )
+{
+  int temp;
+  for (char this_bit = 0; this_bit < 8; this_bit++)
+  {
+    temp = command_byte;
+    if ( 1 << this_bit & temp )
+      digitalWrite(binaryOuts[this_bit],HIGH);
+      else
+      digitalWrite(binaryOuts[this_bit],LOW);
+      
+  }
+}
+
+void latch_DAC()
+{
+ digitalWrite (writeLatch, HIGH);
+ delayMicroseconds(300);
+ digitalWrite (writeLatch, LOW); 
+} 
+
+
+
+void zero() {
+  for (i = 0 ; i < 8; i++)
+  {
+    digitalWrite( binaryOuts[i], LOW );
+  }
+  digitalWrite( writeLatch, HIGH ); //HIGH disables write, because connected thru inv. buffer
+}
+
+void blinkLED()         // Basic blink function
+{
+        digitalWrite(LED,HIGH);
+        delay(50);
+        digitalWrite(LED,LOW);
+        delay(50);
+}
