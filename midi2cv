@@ -5,7 +5,30 @@ MIDI_CREATE_DEFAULT_INSTANCE();
 int i,j;
 int binaryOuts[] = {39, 41, 43, 45, 47, 49, 51, 53}; //Latch 0 - 7 IN pins to Mega OUT pins
 int writeLatch = 35; //When this is HIGH, latch can make changes; when LOW, latch will not change
+
+//Pins to select octaves (connected to transistor bases)
+const char pin_pitch_s0 = 33;
+const char pin_pitch_s1 = 31;
+
 int LED = 13;
+
+//Array of frequencies:
+int Freq[] = {
+  0x0e,0x1e,0x2f,0x42,0x55,0x69,0x7f,0x95,0xae,0xc7,0xe2,0xff,0x00,0x00};
+  
+//DB      0EH                     ;C#
+//DB      01EH                    ;D
+//DB      2FH                     ;D#
+//DB      42H                     ;E
+//DB      55H                     ;F
+//DB      69H                     ;F#
+//DB      7FH                     ;G
+//DB      95H                     ;G#
+//DB      0AEH                    ;A
+//DB      0C7H                    ;A#
+//DB      0E2H                    ;B
+//DB      0FFH                    ;C
+
 
 byte channel;
 byte pitch;
@@ -13,14 +36,8 @@ byte velocity;
 
 void setup() 
 {
-    // Connect the handleNoteOn function to the library,
-    // so it is called upon reception of a NoteOn.
-    MIDI.setHandleNoteOn(handleNoteOn);  // Put only the name of the function
-
-    // Do the same for NoteOffs
+    MIDI.setHandleNoteOn(handleNoteOn);  
     MIDI.setHandleNoteOff(handleNoteOff);
-
-    // Initiate MIDI communications, listen to all channels
     MIDI.begin(MIDI_CHANNEL_OMNI);
 
   //Set Octal Latch connections as OUTPUTS 
@@ -33,55 +50,34 @@ void setup()
   //Writes all Latch INs and Latch Write Enable LOW
   zero(); 
 
-
-  
   //LED for monitoring things and introductory blink series
   pinMode(LED, OUTPUT);
   
-  for ( j = 0 ; j < 11 ; j++ )
-  {
-    digitalWrite( LED, HIGH);
-    delay(100);
-    digitalWrite( LED, LOW );
-    delay(100);
-  }
-  digitalWrite( LED, LOW);  
-}
+}//CLOSE SETUP
 
 void loop() 
 {
+    MIDI.read();
 // 1. Confirmed MIDI is coming from Ableton
 // 2. Confirmed Optocoupler is sending PWM signal
 // 3. Confirm MIDI is read at Serial Port from Optocoupler:
 // 4. Confirm Arduin is reading the correct MIDI note from Ableton
 // 5. Write MIDI Note On code so that the Arduino does the correct things when note pressed
-
-
-if ( MIDI.read() != 0 )
-{
-  channel = MIDI.getChannel();
-  pitch = MIDI.getData1();
-  velocity = MIDI.getData2();   
-  blinkLED();
-
-  handleNoteOn (channel, pitch, velocity);
-  
-}
-
-delay(100);
-
 }//CLOSE LOOP
 
 void handleNoteOn(byte channel, byte pitch, byte velocity)
 {
-/*Pseudocode
- * 0. Blink LED to confirm that this method reads a NoteOn Message
- * 1. Write Octal latches to values of pitch
- * 
- */
 
+// Blink LED to confirm that this method reads a NoteOn Message
+blinkLED();
+
+// Write Arduino Outputs to be sent to DAC based on pitch byte
 DAC_write( pitch );
+
+// Release pitch to DAC by activating Octal latch write and leave on for 300ms
 latch_DAC();
+
+
 
   
 }
@@ -114,6 +110,42 @@ void latch_DAC()
  delayMicroseconds(300);
  digitalWrite (writeLatch, LOW); 
 } 
+
+//Chooses 0, 1, 2, 3 octave
+int get_octave (int note) {
+  if (note>0)
+     return ((note-1)/12);
+  else
+     return 0;    
+}
+
+void set_octave(int oct) {
+  if (oct==0)
+   {
+   digitalWrite (pin_pitch_s0, LOW);  
+   digitalWrite (pin_pitch_s1, LOW);
+   }   
+    
+   else if (oct==1)
+   {
+   digitalWrite (pin_pitch_s0, HIGH);  
+   digitalWrite (pin_pitch_s1, LOW);
+   }
+   
+   else if (oct==2)
+   {
+   digitalWrite (pin_pitch_s0, LOW);  
+   digitalWrite (pin_pitch_s1, HIGH);
+   }
+ 
+   else if (oct>2)
+   {
+   digitalWrite (pin_pitch_s0, HIGH);  
+   digitalWrite (pin_pitch_s1, HIGH);
+   }
+   
+}
+
 
 
 
