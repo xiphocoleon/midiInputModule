@@ -2,20 +2,33 @@
 
 MIDI_CREATE_DEFAULT_INSTANCE();
 
-int i,j;
+int i, j;
 int binaryOuts[] = {39, 41, 43, 45, 47, 49, 51, 53}; //Latch 0 - 7 IN pins to Mega OUT pins
 int writeLatch = 35; //When this is HIGH, latch can make changes; when LOW, latch will not change
 
 //Pins to select octaves (connected to transistor bases)
-const char pin_pitch_s0 = 33;
-const char pin_pitch_s1 = 31;
+const char pin_pitch_s0 = 33; // Controls pin 10 on MUX
+const char pin_pitch_s1 = 31; // Controls pin 9 on MUX
 
+//Pins to select comparators to turn "ON" for a moment to capture a voltage sample
+const char pin_vel_sh = 30; // Controls analog switch ON/OFF via analog sw pin 5
+const char pin_pitch_sh = 28; // Controls analog switch ON/OFF via analog sw pin 13
+
+//General variables:
+unsigned int count = 0;
+unsigned int temp = 0;
+
+//LEDs for monitoring purposes:
 int LED = 13;
+int LED1 = 8;
+int LED2 = 9;
+int LED3 = 10;
 
 //Array of frequencies:
 int Freq[] = {
-  0x0e,0x1e,0x2f,0x42,0x55,0x69,0x7f,0x95,0xae,0xc7,0xe2,0xff,0x00,0x00};
-  
+  0x0e, 0x1e, 0x2f, 0x42, 0x55, 0x69, 0x7f, 0x95, 0xae, 0xc7, 0xe2, 0xff, 0x00, 0x00
+};
+
 //DB      0EH                     ;C#
 //DB      01EH                    ;D
 //DB      2FH                     ;D#
@@ -34,57 +47,84 @@ byte channel;
 byte pitch;
 byte velocity;
 
-void setup() 
+void setup()
 {
-    MIDI.setHandleNoteOn(handleNoteOn);  
-    MIDI.setHandleNoteOff(handleNoteOff);
-    MIDI.begin(MIDI_CHANNEL_OMNI);
+  MIDI.setHandleNoteOn(handleNoteOn);
+  MIDI.setHandleNoteOff(handleNoteOff);
+  MIDI.begin(MIDI_CHANNEL_OMNI);
 
-  //Set Octal Latch connections as OUTPUTS 
+  //Set Octal Latch connections as OUTPUTS
   for ( i = 0 ; i < 8 ; i ++ )
   {
     pinMode(binaryOuts[i], OUTPUT);
   }
+  
   pinMode(writeLatch, OUTPUT);
 
   //Writes all Latch INs and Latch Write Enable LOW
-  zero(); 
+  zero();
 
   //LED for monitoring things and introductory blink series
   pinMode(LED, OUTPUT);
-  
+  pinMode(LED1, OUTPUT);
+  pinMode(LED2, OUTPUT);
+  pinMode(LED3, OUTPUT);
+
+  digitalWrite(LED, LOW);
+  digitalWrite(LED1, LOW);
+  digitalWrite(LED2, LOW);
+  digitalWrite(LED3, LOW);
+
 }//CLOSE SETUP
 
-void loop() 
+void loop()
 {
-    MIDI.read();
-// 1. Confirmed MIDI is coming from Ableton
-// 2. Confirmed Optocoupler is sending PWM signal
-// 3. Confirm MIDI is read at Serial Port from Optocoupler:
-// 4. Confirm Arduin is reading the correct MIDI note from Ableton
-// 5. Write MIDI Note On code so that the Arduino does the correct things when note pressed
+  MIDI.read();
 }//CLOSE LOOP
 
-void handleNoteOn(byte channel, byte pitch, byte velocity)
+void handleNoteOn(byte channel, byte note, byte velocity)
 {
+  //Reminder: an unsigned int is at least 16 bits
+  int octave_in;
+  int pitch_in;
 
-// Blink LED to confirm that this method reads a NoteOn Message
-blinkLED();
+  octave_in = get_octave(note);
+  pitch_in = get_pitch(note);
 
-// Write Arduino Outputs to be sent to DAC based on pitch byte
-DAC_write( pitch );
+  // Write Arduino Outputs to be sent to DAC based on pitch byte
+  DAC_write( note );
 
-// Release pitch to DAC by activating Octal latch write and leave on for 300ms
-latch_DAC();
+  // Release pitch to DAC by activating Octal latch write and leave on for 300ms
+  latch_DAC();
+
+  //Monitor that NoteOn received
+  digitalWrite(LED1, HIGH);
+  delay(100);
+  digitalWrite(LED1, LOW);
+
+  //Monitor that chosen octave is measured
+  if ( octave_in == 5 )
+  {
+    digitalWrite(LED3, HIGH);
+    delay(100);
+    digitalWrite(LED3, LOW);
+  }
+  else{}
 
 
 
-  
 }
-void handleNoteOff(byte channel, byte pitch, byte velocity)
+void handleNoteOff(byte channel, byte note, byte velocity)
 {
-    // Do something when the note is released.
-    // Note that NoteOn messages with 0 velocity are interpreted as NoteOffs.
+  // Do something when the note is released.
+  // Note that NoteOn messages with 0 velocity are interpreted as NoteOffs.
+
+  note = note - 36;
+
+
+  digitalWrite(LED2, HIGH);
+  delay(100);
+  digitalWrite(LED2, LOW);
 }
 
 // Operations related to reading/writing MIDI
@@ -97,54 +137,94 @@ void DAC_write ( char command_byte )
   {
     temp = command_byte;
     if ( 1 << this_bit & temp )
-      digitalWrite(binaryOuts[this_bit],HIGH);
-      else
-      digitalWrite(binaryOuts[this_bit],LOW);
-      
+      digitalWrite(binaryOuts[this_bit], HIGH);
+    else
+      digitalWrite(binaryOuts[this_bit], LOW);
+
   }
 }
 
 void latch_DAC()
 {
- digitalWrite (writeLatch, HIGH);
- delayMicroseconds(300);
- digitalWrite (writeLatch, LOW); 
-} 
+  digitalWrite (writeLatch, HIGH);
+  delayMicroseconds(300);
+  digitalWrite (writeLatch, LOW);
+}
+
+//get_pitch will always return a note number in the first octave, e.g., note 122 returns note 1
+int get_pitch (int note) {
+
+  if (note > 0)
+    return ( (note - 1) - ((note - 1) / 12) * 12);
+  else
+    return 0;
+}
 
 //Chooses 0, 1, 2, 3 octave
 int get_octave (int note) {
-  if (note>0)
-     return ((note-1)/12);
+  if (note > 0)
+    return ((note - 1) / 12);
   else
-     return 0;    
+    return 0;
+}
+
+void set_pitch(int p, int oct, int note) {
+  int freq_out;
+
+  // p is 0 for C. p goes from 0 to 11.
+  // In octave 0, C outputs 0V (DAC=0)
+  // In higher octaves, C outputs 3V (DAC=255)
+  // The first note of next octave is note 1, C# (Freq[0])
+
+  freq_out = Freq[p];
+
+  if (note == 0)
+    freq_out = 0;
+
+  DAC_write(freq_out);
 }
 
 void set_octave(int oct) {
-  if (oct==0)
-   {
-   digitalWrite (pin_pitch_s0, LOW);  
-   digitalWrite (pin_pitch_s1, LOW);
-   }   
-    
-   else if (oct==1)
-   {
-   digitalWrite (pin_pitch_s0, HIGH);  
-   digitalWrite (pin_pitch_s1, LOW);
-   }
-   
-   else if (oct==2)
-   {
-   digitalWrite (pin_pitch_s0, LOW);  
-   digitalWrite (pin_pitch_s1, HIGH);
-   }
- 
-   else if (oct>2)
-   {
-   digitalWrite (pin_pitch_s0, HIGH);  
-   digitalWrite (pin_pitch_s1, HIGH);
-   }
-   
+  if (oct == 0)
+  {
+    digitalWrite (pin_pitch_s0, LOW);
+    digitalWrite (pin_pitch_s1, LOW);
+  }
+
+  else if (oct == 1)
+  {
+    digitalWrite (pin_pitch_s0, HIGH);
+    digitalWrite (pin_pitch_s1, LOW);
+  }
+
+  else if (oct == 2)
+  {
+    digitalWrite (pin_pitch_s0, LOW);
+    digitalWrite (pin_pitch_s1, HIGH);
+  }
+
+  else if (oct > 2)
+  {
+    digitalWrite (pin_pitch_s0, HIGH);
+    digitalWrite (pin_pitch_s1, HIGH);
+  }
+
 }
+
+void sample_pitch()
+{
+  digitalWrite (pin_pitch_sh, HIGH);
+  delayMicroseconds(300);
+  digitalWrite (pin_pitch_sh, LOW);
+}
+
+void sample_velocity()
+{
+  digitalWrite (pin_vel_sh, HIGH);
+  delayMicroseconds(300);
+  digitalWrite (pin_vel_sh, LOW);
+}
+
 
 
 
@@ -159,8 +239,8 @@ void zero() {
 
 void blinkLED()         // Basic blink function
 {
-        digitalWrite(LED,HIGH);
-        delay(50);
-        digitalWrite(LED,LOW);
-        delay(50);
+  digitalWrite(LED, HIGH);
+  delay(50);
+  digitalWrite(LED, LOW);
+  delay(50);
 }
