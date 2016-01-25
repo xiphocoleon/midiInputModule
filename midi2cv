@@ -7,12 +7,13 @@ int binaryOuts[] = {39, 41, 43, 45, 47, 49, 51, 53}; //Latch 0 - 7 IN pins to Me
 int writeLatch = 35; //When this is HIGH, latch can make changes; when LOW, latch will not change
 
 //Pins to select octaves (connected to transistor bases)
-const char pin_pitch_s0 = 33; // Controls pin 10 on MUX
-const char pin_pitch_s1 = 31; // Controls pin 9 on MUX
+const char pin_pitch_s0 = 33; // Controls pin 10 (A) on MUX
+const char pin_pitch_s1 = 31; // Controls pin 9 (B) on MUX
 
 //Pins to select comparators to turn "ON" for a moment to capture a voltage sample
-const char pin_vel_sh = 30; // Controls analog switch ON/OFF via analog sw pin 5
 const char pin_pitch_sh = 28; // Controls analog switch ON/OFF via analog sw pin 13
+const char pin_vel_sh = 30; // Controls analog switch ON/OFF via analog sw pin 5
+
 
 //General variables:
 unsigned int count = 0;
@@ -23,6 +24,7 @@ int LED = 13;
 int LED1 = 8;
 int LED2 = 9;
 int LED3 = 10;
+
 
 //Array of frequencies:
 int Freq[] = {
@@ -48,7 +50,7 @@ byte pitch;
 byte velocity;
 
 void setup()
-{
+{ 
   MIDI.setHandleNoteOn(handleNoteOn);
   MIDI.setHandleNoteOff(handleNoteOff);
   MIDI.begin(MIDI_CHANNEL_OMNI);
@@ -60,6 +62,9 @@ void setup()
   }
   
   pinMode(writeLatch, OUTPUT);
+
+  pinMode(pin_pitch_s0, OUTPUT);
+  pinMode(pin_pitch_s1, OUTPUT);
 
   //Writes all Latch INs and Latch Write Enable LOW
   zero();
@@ -74,7 +79,6 @@ void setup()
   digitalWrite(LED1, LOW);
   digitalWrite(LED2, LOW);
   digitalWrite(LED3, LOW);
-
 }//CLOSE SETUP
 
 void loop()
@@ -84,47 +88,42 @@ void loop()
 
 void handleNoteOn(byte channel, byte note, byte velocity)
 {
-  //Reminder: an unsigned int is at least 16 bits
   int octave_in;
   int pitch_in;
 
   octave_in = get_octave(note);
   pitch_in = get_pitch(note);
 
-  // Write Arduino Outputs to be sent to DAC based on pitch byte
-  DAC_write( note );
-
-  // Release pitch to DAC by activating Octal latch write and leave on for 300ms
-  latch_DAC();
-
-  //Monitor that NoteOn received
-  digitalWrite(LED1, HIGH);
-  delay(100);
-  digitalWrite(LED1, LOW);
-
-  //Monitor that chosen octave is measured
-  if ( octave_in == 5 )
+  if (octave_in == 0 )
+  {
+    digitalWrite(LED1, HIGH);
+    delay(100);
+    digitalWrite(LED1, LOW);
+  }
+  if (octave_in == 1 )
   {
     digitalWrite(LED3, HIGH);
     delay(100);
     digitalWrite(LED3, LOW);
   }
-  else{}
-
-
-
+  
+  if (pitch_in == 0 )
+  {
+    digitalWrite(LED2, HIGH);
+    delay(100);
+    digitalWrite(LED2, LOW);
+  }
+  
+  set_octave( octave_in );
+  set_pitch( pitch_in , octave_in , note );
 }
 void handleNoteOff(byte channel, byte note, byte velocity)
 {
   // Do something when the note is released.
   // Note that NoteOn messages with 0 velocity are interpreted as NoteOffs.
+DAC_write( 0 );
+latch_DAC();
 
-  note = note - 36;
-
-
-  digitalWrite(LED2, HIGH);
-  delay(100);
-  digitalWrite(LED2, LOW);
 }
 
 // Operations related to reading/writing MIDI
@@ -151,6 +150,7 @@ void latch_DAC()
   digitalWrite (writeLatch, LOW);
 }
 
+//get_pitch determines C#0 -> C1
 //get_pitch will always return a note number in the first octave, e.g., note 122 returns note 1
 int get_pitch (int note) {
 
@@ -181,7 +181,9 @@ void set_pitch(int p, int oct, int note) {
   if (note == 0)
     freq_out = 0;
 
-  DAC_write(freq_out);
+  DAC_write( freq_out );
+  latch_DAC();
+  sample_pitch();
 }
 
 void set_octave(int oct) {
